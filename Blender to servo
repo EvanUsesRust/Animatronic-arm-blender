@@ -1,0 +1,54 @@
+import bpy
+import serial
+import time
+import math
+
+# ---- CONFIG ----
+PORT = 'COM4'  # your Arduino port
+BAUD = 115200
+SEND_EVERY = 2  # send every 2 frames for 12 FPS scene
+
+# ---- OPEN SERIAL ----
+ser = serial.Serial(PORT, BAUD)
+time.sleep(2)
+
+# ---- ARMATURE ----
+arm = bpy.data.objects['Armature']  # rename to your armature if different
+
+# ---- BONES ----
+# Left side
+left_base = arm.pose.bones['mixamorig:Base']
+left_fore = arm.pose.bones['mixamorig:forearm']
+
+# Right side
+right_base = arm.pose.bones['mixamorig:LeftArm']
+right_fore = arm.pose.bones['mixamorig:LeftForeArm']
+
+# ---- HELPER ----
+def clamp_map(rad, min_deg=-90, max_deg=90):
+    """Convert radians to servo 0-180 while clamping"""
+    deg = math.degrees(rad)
+    deg = max(min_deg, min(max_deg, deg))
+    return int((deg - min_deg) * 180 / (max_deg - min_deg))
+
+# ---- FRAME HANDLER ----
+def frame_handler(scene):
+    if scene.frame_current % SEND_EVERY != 0:
+        return
+
+    # Left side
+    leftY = clamp_map(left_base.rotation_euler[1])  # Y
+    leftZ = clamp_map(left_base.rotation_euler[2])  # Z
+    leftF = clamp_map(left_fore.rotation_euler[2])  # Z
+
+    # Right side
+    rightY = clamp_map(right_base.rotation_euler[1])
+    rightZ = clamp_map(right_base.rotation_euler[2])
+    rightF = clamp_map(right_fore.rotation_euler[2])
+
+    # Send as CSV
+    ser.write(f"{leftY},{leftZ},{leftF},{rightY},{rightZ},{rightF}\n".encode())
+
+# ---- REGISTER HANDLER ----
+bpy.app.handlers.frame_change_pre.clear()
+bpy.app.handlers.frame_change_pre.append(frame_handler)
